@@ -1,9 +1,10 @@
 import { Component,  OnInit } from '@angular/core';
-import { NgForm } from '@angular/forms';
+import { FormControl, FormGroup, Validators } from '@angular/forms';
 import { PostsService } from '../post-list/post.service';
 
 import { ActivatedRoute, ParamMap } from '@angular/router';
 import { Post } from '../post-list/post.model';
+import { mimeType } from './my-validator';
 
 @Component({
   selector: 'app-post-create',
@@ -18,30 +19,45 @@ export class PostCreateComponent implements OnInit {
   private mode = 'create';
   private postId: string;
   post: Post;
-
   isLoading = false;
-
+  form: FormGroup;
+  imagePreview: string;
   constructor(public postService: PostsService,
                public route: ActivatedRoute) { }
 
-  onSavePost(form: NgForm ) {
-    if (form.invalid) {
+  onSavePost() {
+    if (this.form.invalid) {
       return;
     }
     this.isLoading = true;
     if (this.mode === "create") {
-      this.postService.addPost(form.value.title, form.value.content);
+      this.postService.addPost(
+        this.form.value.title,
+         this.form.value.content,
+          this.form.value.image); // change1
     }
     else {
       this.postService.updatePost(
         this.postId,
-        form.value.title, form.value.content
+        this.form.value.title,
+         this.form.value.content,
+         this.form.value.image  // change1
       )
     }
-    form.resetForm();  /* post reset korar jonno use kora hoy */
+    this.form.reset();
   }
 
   ngOnInit(): void {
+    this.form = new FormGroup({
+      title: new FormControl(null, {
+        validators: [Validators.required, Validators.minLength(3)]
+      }),
+      content: new FormControl(null,
+         {validators: [Validators.required]}),
+      image: new FormControl(null, {validators: [Validators.required],
+      asyncValidators: [mimeType]
+      })
+    });
     this.route.paramMap.subscribe((paramMap : ParamMap) => {
       if (paramMap.has('postId')) {
         this.mode = 'edit';
@@ -49,15 +65,36 @@ export class PostCreateComponent implements OnInit {
         this.isLoading = true;
         this.postService.getPost(this.postId).subscribe(postData => {
         this.isLoading = false;
-        this.post = { id: postData._id, title: postData.title,
-                     content:postData.content};
-        })
+        this.post = {
+           id: postData._id,
+            title: postData.title,
+            content:postData.content,
+            imagePath: postData.imagePath
+          };
+
+            this.form.setValue({
+              title: this.post.title,
+              content: this.post.content,
+              image: postData.imagePath // change1
+            });
+        });
       }
       else {
         this.mode = 'create';
         this.postId = null;
       }
     })
+  }
+
+  onImagePicker(event: Event) {
+    const file = (event.target as HTMLInputElement).files[0];
+    this.form.patchValue({image: file});
+    this.form.get('image').updateValueAndValidity();
+    const reader = new FileReader();
+    reader.onload = () => {
+      this.imagePreview = reader.result as string;
+    };
+    reader.readAsDataURL(file);
   }
 
 }
